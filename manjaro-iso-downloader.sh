@@ -14,38 +14,40 @@ clear
 window_icon=/usr/share/icons/manjaro/maia/32x32.png
 main=/usr/bin/manjaro-iso-downloader
 iso_dir=$HOME/manjaro-iso
-gpg_log=$(mktemp)
+gpg_log=$(mktemp)\
 check_sums_log=$(mktemp)
 iso_list=$iso_dir/.iso.list
 missing_prog=$(mktemp)
+missing_manj_de=$(mktemp)
 iso_ver_url='https://gitlab.manjaro.org/webpage/iso-info/-/raw/master/file-info.json' 
 iso_ver=$(curl -s $iso_ver_url | grep -m1 'image' | grep -oP '(?<=kde/).*(?=/manjaro)')
-edition='Xfce\!Plasma\!Gnome'
 version='full\!minimal'
 type='direct\!torrent'
 
 #list of essential programs
 check_prog=(curl wget aria2c zenity yad awk sed)
 
+#Upated Manjaro flavour list
+manj_de=(xfce gnome kde i3 cinnamon budgie mate)
 
 #grab iso link
-curl -s $iso_ver_url | grep 'image' | grep 'download.manjaro.org' | awk '{print $2}' | tr -d '",' | head -n -8 > "$iso_list"
+curl -s $iso_ver_url | grep 'image' | grep 'download.manjaro.org' | awk '{print $2}' | tr -d '",' > "$iso_list"
 
-trap 'rm -f $check_sums_log $gpg_log ; killall aria2c ; exit' ERR EXIT
+trap 'rm -f $check_sums_log $gpg_log $missing_prog $missing_manj_de ; killall aria2c ; exit' ERR EXIT
 
 #Main Window settings
 gui() {
     icon=/usr/share/icons/manjaro/maia/maia.svg
 
-    if [ -r "$icon" ] ; then
+    if [[ -r "$icon" ]] ; then
         GDK_BACKEND=x11 /usr/bin/yad --center --window-icon="$icon" --title="Manjaro Isos $iso_ver Downloader and Checker" "$@"
     else
         GDK_BACKEND=x11 /usr/bin/yad --center --title="Manjaro Isos Downloader and Checker" "$@"
     fi
 }
 
-Welcome() 
-{  ISO=$(gui --image="$window_icon" --text-align=center --text="<b>Welcome to Manjaro Isos Downloader and Checker</b>\nA simple <b>GUI</b> for download lastes Official Isos and check the integrity" \
+Welcome() {
+    ISO=$(gui --image="$window_icon" --text-align=center --text="<b>Welcome to Manjaro Isos Downloader and Checker</b>\nA simple <b>GUI</b> for download lastes Isos and check the integrity" \
     --form --separator=" " \
     --field="Edition::CB" $edition \
     --field="Version::CB" $version \
@@ -66,28 +68,28 @@ get_iso() {
         [[ $VERSION == 'full' ]] && \
         wget -nc -P "$iso_dir" "$iso_full_link" "$iso_full_sha1" "$iso_full_sig" 2>&1 | \
         sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
-        gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons || \
+        gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons --width=550 --height=150 || \
         wget -nc -P "$iso_dir" "$iso_minimal_link" "$iso_minimal_sha1" "$iso_minimal_sig" 2>&1 | \
         sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
-        gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons
+        gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons --width=550 --height=150
      else
         [[ $VERSION == 'full' ]] && \
         wget -nc -P "$iso_dir" "$iso_full_torrent" 2>&1 | \
         sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
-        gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver torrent..." --auto-close --no-buttons || \
+        gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver torrent..." --auto-close --no-buttons --width=550 --height=150 || \
         wget -nc -P "$iso_dir" "$iso_minimal_torrent" 2>&1 | \
         sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
-        gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver torrent..." --auto-close --no-buttons
+        gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver torrent..." --auto-close --no-buttons --width=550 --height=150
     fi          
 
     if [[ $TYPE == 'torrent' ]] ; then
         [[ $VERSION == 'full' ]] && \
         wget -nc -P "$iso_dir" "$iso_full_sha1" "$iso_full_sig" "$iso_full_torrent" 2>&1 | \
         sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
-        gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons || \
+        gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons --width=550 --height=150 || \
         wget -nc -P "$iso_dir" "$iso_minimal_sha1" "$iso_minimal_sig" "$iso_minimal_torrent" 2>&1 | \
         sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
-        gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons
+        gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons --width=550 --height=150
 
         cd $iso_dir
         (aria2c --continue=true --max-concurrent-downloads=5 --max-connection-per-server=4 --min-split-size=10M --split=5 --disable-ipv6=true \
@@ -109,12 +111,22 @@ check_programs() {
     fi
 }
 
+check_manj_de() {
+    for i in "${manj_de[@]}"; do
+        grep "$i" "$iso_list" >/dev/null 2>&1 || echo "$i" >> "$missing_manj_de"
+    done
+    
+    if [[ -s $missing_manj_de ]]; then
+        gui --width=850 --height=270 --image=dialog-error --button=Ok --text-align=center --text='The following DE are temporary not avaiable:' --text-info < "$missing_manj_de"
+    fi
+}
+
 check_integrity() {
     if [[ "$(ls -A $iso_dir)" ]]; then
         cd $iso_dir
-        last_iso=$(echo $(ls -Art *.iso) | tail -n1)
-        last_sig=$(echo $(ls -Art *.sig) | tail -n1)
-        last_chksum=$(echo $(ls -Art *.sha1) | tail -n1)
+        last_iso=$(ls -At *.iso | head -n1)
+        last_sig=$(ls -At *.sig | head -n1)
+        last_chksum=$(ls -At *.sha1 | head -n1)
 
         gui --timeout=5 --timeout-indicator=top --text='Next step: checksums integrity' --button=Skip:0 --width=550 --height=150
 
@@ -155,6 +167,19 @@ check_connection() {
     fi
 }
 
+check_edition() {
+    gui --text-align=center --text="You can download Official or Community Isos, default are the Official Isos \nfor Community press the button." --button='Ok':0 \
+    --button='Community':1 --button='Restart':2 --button='Cancel':3
+
+    sel_ed=$?
+    case $sel_ed in
+        0) edition='Xfce\!Plasma\!Gnome' ;;
+        1) edition='Budgie\!Cinnamon\!I3\!Mate' ;;
+        2) exec $main ;;
+        *) exit 1
+    esac
+}
+
 final_msg() {
     gui --text="Done, the Iso can be found at $iso_dir " --button="Exit":0 --button="Open folder":1 --button="New Iso":2
         case $? in
@@ -168,6 +193,8 @@ final_msg() {
 
 check_programs
 check_connection
+check_manj_de
+check_edition
 
 [[ ! -d $/HOME/$iso_dir ]] && mkdir -p $iso_dir
 
