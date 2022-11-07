@@ -11,10 +11,10 @@
 
 clear
 
-window_icon=/usr/share/icons/manjaro/maia/32x32.png
+window_icon=/usr/share/icons/manjaro/dcmi.svg
 main=/usr/bin/manjaro-iso-downloader
 iso_dir=$HOME/manjaro-iso
-gpg_log=$(mktemp)\
+gpg_log=$(mktemp)
 check_sums_log=$(mktemp)
 iso_list=$iso_dir/.iso.list
 missing_prog=$(mktemp)
