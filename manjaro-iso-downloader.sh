@@ -11,7 +11,7 @@
 
 clear
 
-window_icon=/usr/share/icons/manjaro/dcmi.svg
+window_icon=dcmi
 main=/usr/bin/manjaro-iso-downloader
 iso_dir=$HOME/manjaro-iso
 gpg_log=$(mktemp)
@@ -37,7 +37,7 @@ trap 'rm -f $check_sums_log $gpg_log $missing_prog $missing_manj_de ; killall ar
 
 #Main Window settings
 gui() {
-    icon=/usr/share/icons/manjaro/dcmi.svg
+    icon=dcmi
 
     if [[ -r "$icon" ]] ; then
         GDK_BACKEND=x11 /usr/bin/yad --center --window-icon="$icon" --title="Manjaro Isos $iso_ver Downloader and Checker" "$@"

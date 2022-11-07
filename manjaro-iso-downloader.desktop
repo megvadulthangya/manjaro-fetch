@@ -4,6 +4,6 @@ Encoding=UTF-8
 Name=Manjaro ISO downloader
 Comment=Download official Manjaro Developer Isos
 Exec=/usr/bin/manjaro-iso-downloader
-Icon=/usr/share/icons/manjaro/dcmi.svg
+Icon=dcmi
 Categories=Applications
 StartupNotify=false
