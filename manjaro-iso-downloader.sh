@@ -169,7 +169,7 @@ check_connection() {
 }
 
 check_edition() {
-    gui --text-align=center --text="You can download Official or Community Isos, default are the Official Isos \nfor Community press the button." --button='Ok':0 \
+    gui --image="$window_icon" --text-align=center --text="You can download Official or Community Isos, default are the Official Isos \nfor Community press the button." --button='Ok':0 \
     --button='Community':1 --button='Restart':2 --button='Cancel':3
 
     sel_ed=$?
