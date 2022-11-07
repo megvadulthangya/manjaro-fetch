@@ -37,7 +37,7 @@ trap 'rm -f $check_sums_log $gpg_log $missing_prog $missing_manj_de ; killall ar
 
 #Main Window settings
 gui() {
-    icon=/usr/share/icons/manjaro/maia/maia.svg
+    icon=/usr/share/icons/manjaro/dcmi.svg
 
     if [[ -r "$icon" ]] ; then
         GDK_BACKEND=x11 /usr/bin/yad --center --window-icon="$icon" --title="Manjaro Isos $iso_ver Downloader and Checker" "$@"
