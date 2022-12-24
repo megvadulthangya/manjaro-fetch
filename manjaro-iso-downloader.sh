@@ -9,21 +9,29 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-clear
+set -x
+#clear
 
 window_icon=/usr/share/icons/hicolor/32x32/apps/dcmi.svg
 
 main=/usr/bin/manjaro-iso-downloader
-iso_dir=$HOME/manjaro-iso
+iso_dir=$HOME/Manjaro-Iso
 gpg_log=$(mktemp)
 check_sums_log=$(mktemp)
 iso_list=$iso_dir/.iso.list
+iso_dev_list=$iso_dir/.iso-dev.list
 missing_prog=$(mktemp)
 missing_manj_de=$(mktemp)
 iso_ver_url='https://gitlab.manjaro.org/webpage/iso-info/-/raw/master/file-info.json' 
 iso_ver=$(curl -s $iso_ver_url | grep -m1 'image' | grep -oP '(?<=kde/).*(?=/manjaro)')
 version='full\!minimal'
 type='direct\!torrent'
+is_dev=false
+iso_full_link_dev=$(mktemp)
+iso_minimal_link_dev=$(mktemp)
+
+#work dir
+[[ ! -d $HOME/$iso_dir ]] && mkdir -p $iso_dir
 
 #list of essential programs
 check_prog=(curl wget aria2c zenity yad awk sed)
@@ -31,10 +39,13 @@ check_prog=(curl wget aria2c zenity yad awk sed)
 #Upated Manjaro flavour list
 manj_de=(xfce gnome kde i3 cinnamon budgie mate)
 
+#Manjaro dev Iso list
+manj_dev_de=(gnome plasma xfce)
+
 #grab iso link
 curl -s $iso_ver_url | grep 'image' | grep 'download.manjaro.org' | awk '{print $2}' | tr -d '",' > "$iso_list"
 
-trap 'rm -f $check_sums_log $gpg_log $missing_prog $missing_manj_de ; killall aria2c ; exit' ERR EXIT
+trap 'rm -Rf $iso_dir/.tmp $check_sums_log $gpg_log $missing_prog $missing_manj_de ; killall aria2c ; exit' ERR EXIT
 
 #Main Window settings
 gui() {
@@ -53,6 +64,19 @@ Welcome() {
     --field="Edition::CB" $edition \
     --field="Version::CB" $version \
     --field="Type::CB" $type)
+    
+    is_done=$?
+}
+
+Welcome_dev() {
+    is_dev=true
+    edition='Xfce\!Plasma\!Plasma-daily\!Gnome'
+    ISO=$(gui --image="$window_icon" --text-align=center --text="<b>Welcome to Manjaro Isos Downloader and Checker</b>\nA simple <b>GUI</b> for download lastes Isos and check the integrity" \
+    --form --separator=" " \
+    --field="Edition::CB" $edition \
+    --field="Version::CB" $version)
+
+    is_done=$?
 }
 
 get_iso() {
@@ -97,8 +121,25 @@ get_iso() {
         --seed-time=0 --summary-interval=0 --console-log-level=warn --dir="$iso_dir" $iso_dir/*.torrent 2>&1) &
         pid=$!; while kill -0 $pid 2>&1; do echo 'working'; done | zenity --progress --pulsate --text="Waiting for Torrent download..." \
         --title="Manjaro Isos $iso_ver Downloader and Checker" --auto-close --no-cancel
-
     fi
+}
+
+get_iso_dev() {
+
+    grep "$DE" "$iso_dev_list" | grep -v 'minimal' | grep 'z' | tr "\n" " " > "$iso_full_link_dev"
+    grep "$DE" "$iso_dev_list" | grep 'minimal' | grep 'z' | tr "\n" " " > "$iso_minimal_link_dev"
+    iso_full_sha256=$(grep "$DE" "$iso_dev_list" | grep -v 'minimal' | grep '.sha256')
+    iso_minimal_sha256=$(grep "$DE" "$iso_dev_list" | grep 'minimal' | grep '.sha256')
+
+    mkdir -p $iso_dir/.tmp
+
+    [[ $VERSION == 'full' ]] && \
+    wget -nc -P "$iso_dir/.tmp" $(cat $iso_full_link_dev) "$iso_full_sha256" 2>&1 | \
+    sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
+    gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons --width=550 --height=150 || \
+    wget -nc -P "$iso_dir/.tmp" $(cat $iso_minimal_link_dev) "$iso_minimal_sha256" 2>&1 | \
+    sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
+    gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons --width=550 --height=150
 }
 
 check_programs() {
@@ -127,7 +168,7 @@ check_integrity() {
         cd $iso_dir
         last_iso=$(ls -At *.iso | head -n1)
         last_sig=$(ls -At *.sig | head -n1)
-        last_chksum=$(ls -At *.sha1 | head -n1)
+        last_chksum=$(ls -At *.sha* | head -n1)
 
         gui --timeout=5 --timeout-indicator=top --text='Next step: checksums integrity' --button=Skip:0 --width=550 --height=150
 
@@ -151,10 +192,26 @@ check_integrity() {
             --title="Manjaro Isos $iso_ver Downloader and Checker" --auto-close --no-cancel
 
             gui --width=850 --height=270 --button=Ok --image=dialog-error --text-align=center --text='GPG signatur result:' --text-info < $gpg_log
-        fi
-    
-    fi
-     
+        fi    
+    fi     
+}
+
+check_integrity_dev() {
+    if [[ "$(ls -A $iso_dir)" ]]; then
+        cd $iso_dir
+      
+        gui --timeout=5 --timeout-indicator=top --text='Next step: checksums integrity' --button=Skip:0 --width=550 --height=150
+
+        if [[ $? != 0 ]]; then
+            (sha256sum -c $iso_name.sha* > $check_sums_log) &
+            pid=$!
+            
+            while kill -0 $pid 2>&1; do echo 'working'; done | zenity --progress --pulsate --text="Waiting for SHASUM check..." \
+            --title="Manjaro Isos $iso_ver Downloader and Checker" --auto-close --no-cancel
+
+            gui --width=850 --height=270 --button=Ok --image=dialog-error --text-align=center --text='SHASUM check result:' --text-info < $check_sums_log
+        fi   
+    fi     
 }
 
 check_connection() {
@@ -169,14 +226,15 @@ check_connection() {
 }
 
 check_edition() {
-    gui --image="$window_icon" --text-align=center --text="You can download Official or Community Isos, default are the Official Isos \nfor Community press the button." --button='Ok':0 \
-    --button='Community':1 --button='Restart':2 --button='Cancel':3
+    gui --image="$window_icon" --text-align=center --text="You can download Official or Community Isos, default are the Official Isos \nfor Community press the button." --button='Restart':2 \
+    --button='Community':1 --button='Development':3 --button='Exit':4 --button='Ok':0
 
     sel_ed=$?
     case $sel_ed in
         0) edition='Xfce\!Plasma\!Gnome' ;;
         1) edition='Budgie\!Cinnamon\!I3\!Mate' ;;
         2) exec $main ;;
+        3) dev_iso_list && Welcome_dev ;;
         *) exit 1
     esac
 }
@@ -190,6 +248,40 @@ final_msg() {
         esac
 }
 
+dev_iso_list() {
+#grab iso dev download link #####################################################################
+    rm -f "$iso_dev_list"
+    for i in "${manj_dev_de[@]}"; do
+        iso_ver_dev_url="https://api.github.com/repos/manjaro-${i}/download/releases"
+        curl -s "$iso_ver_dev_url"/latest | jq -r ".assets[] | .browser_download_url " >> "$iso_dev_list"
+    done
+
+    curl -s https://api.github.com/repos/manjaro/plasma-daily/releases/latest | jq -r ".assets[] | .browser_download_url" >> "$iso_dev_list"
+#################################################################################################
+}
+
+build_iso() {
+    cd $iso_dir/.tmp
+    7z t *.zip &> /dev/null &
+    while pkill -0 7z; do
+    	echo 'Checking'
+    done | zenity --progress --pulsate --text="Checkink..." --title="Manjaro Isos $iso_ver Downloader and Checker" --auto-close --no-cancel
+    if [[ $i -eq 0 ]]; then
+        7z x -y *.zip &> /dev/null & 
+        while pkill -0 7z; do
+            echo 'Unzipping... '
+        done | zenity --progress --pulsate --text="Checkink..." --title="Manjaro Isos $iso_ver Downloader and Checker" --auto-close --no-cancel
+    else gui --text-aligned=center --text='Iso corrupted: choice again an Iso' --button='Change version':0 --button='Exit':1
+        if [[ $? -eq 0 ]]; then
+            exec $main
+        else exit 1
+        fi
+    fi
+    iso_name=$(ls *.iso)
+    mv *.iso *.sha* $iso_dir
+    rm -Rf $iso_dir/.tmp
+}
+
 #Main program
 
 check_programs
@@ -197,18 +289,27 @@ check_connection
 check_manj_de
 check_edition
 
-[[ ! -d $/HOME/$iso_dir ]] && mkdir -p $iso_dir
+[[ $is_dev = 'false' ]] && Welcome
 
-Welcome
+if [[ $is_dev = 'false' ]]; then
+    [[ $is_done == 1 ]] && exec $main
+    DE=$(echo $ISO | awk '{print $1}' | tr '[:upper:]' '[:lower:]')
+    VERSION=$(echo $ISO | awk '{print $2}')
+    TYPE=$(echo $ISO | awk '{print $3}')
 
-DE=$(echo $ISO | awk '{print $1}' | tr '[:upper:]' '[:lower:]')
-VERSION=$(echo $ISO | awk '{print $2}')
-TYPE=$(echo $ISO | awk '{print $3}')
+    [[ $DE == 'plasma' ]] && DE=kde
+else 
+    [[ $is_done == 1 ]] && exec $main
+    DE=$(echo $ISO | awk '{print $1}' | tr '[:upper:]' '[:lower:]')
+    VERSION=$(echo $ISO | awk '{print $2}')
+fi
 
-[[ $DE == 'plasma' ]] && DE=kde
+[[ $is_dev == false ]] && get_iso
+[[ $is_dev == true ]] && get_iso_dev
+[[ $is_dev == true ]] && build_iso
 
-get_iso
-check_integrity
+[[ $is_dev == false ]] && check_integrity || check_integrity_dev
+
 final_msg
 
 $main
