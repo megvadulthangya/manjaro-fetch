@@ -226,8 +226,8 @@ check_connection() {
 }
 
 check_edition() {
-    gui --image="$window_icon" --text-align=center --text="You can download Official or Community Isos, default are the Official Isos \nfor Community press the button." --button='Restart':2 \
-    --button='Community':1 --button='Development':3 --button='Exit':4 --button='Ok':0
+    gui --image="$window_icon" --text-align=center --text="Download Official, Community or Development ISOs:" --button='Official':0 \
+    --button='Community':1 --button='Development':3 --button='Restart':2 --button='Exit':4
 
     sel_ed=$?
     case $sel_ed in
