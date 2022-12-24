@@ -9,8 +9,8 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-set -x
-#clear
+#set -x
+clear
 
 window_icon=/usr/share/icons/hicolor/32x32/apps/dcmi.svg
 
@@ -136,10 +136,10 @@ get_iso_dev() {
     [[ $VERSION == 'full' ]] && \
     wget -nc -P "$iso_dir/.tmp" $(cat $iso_full_link_dev) "$iso_full_sha256" 2>&1 | \
     sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
-    gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons --width=550 --height=150 || \
+    gui --image=download --progress --pulsate --title="Downloading $DE development version..." --auto-close --no-buttons --width=550 --height=150 || \
     wget -nc -P "$iso_dir/.tmp" $(cat $iso_minimal_link_dev) "$iso_minimal_sha256" 2>&1 | \
     sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
-    gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons --width=550 --height=150
+    gui --image=download --progress --pulsate --title="Downloading $DE development version..." --auto-close --no-buttons --width=550 --height=150
 }
 
 check_programs() {
@@ -206,10 +206,10 @@ check_integrity_dev() {
             (sha256sum -c $iso_name.sha* > $check_sums_log) &
             pid=$!
             
-            while kill -0 $pid 2>&1; do echo 'working'; done | zenity --progress --pulsate --text="Waiting for SHASUM check..." \
+            while kill -0 $pid 2>&1; do echo 'working'; done | zenity --progress --pulsate --text="Waiting for SHA256SUM check..." \
             --title="Manjaro Isos $iso_ver Downloader and Checker" --auto-close --no-cancel
 
-            gui --width=850 --height=270 --button=Ok --image=dialog-error --text-align=center --text='SHASUM check result:' --text-info < $check_sums_log
+            gui --width=850 --height=270 --button=Ok --image=dialog-error --text-align=center --text='SHA256SUM check result:' --text-info < $check_sums_log
         fi   
     fi     
 }
