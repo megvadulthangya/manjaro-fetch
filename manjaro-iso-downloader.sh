@@ -9,7 +9,6 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-#set -x
 clear
 
 window_icon=/usr/share/icons/hicolor/32x32/apps/dcmi.svg
@@ -29,6 +28,7 @@ type='direct\!torrent'
 is_dev=false
 iso_full_link_dev=$(mktemp)
 iso_minimal_link_dev=$(mktemp)
+isos_downloaded=$(mktemp)
 
 #work dir
 [[ ! -d $HOME/$iso_dir ]] && mkdir -p $iso_dir
@@ -45,7 +45,7 @@ manj_dev_de=(gnome plasma xfce)
 #grab iso link
 curl -s $iso_ver_url | grep 'image' | grep 'download.manjaro.org' | awk '{print $2}' | tr -d '",' > "$iso_list"
 
-trap 'rm -Rf $iso_dir/.tmp $check_sums_log $gpg_log $missing_prog $missing_manj_de ; killall aria2c ; exit' ERR EXIT
+trap 'rm -Rf $iso_dir/.tmp $check_sums_log $gpg_log $missing_prog $missing_manj_de $isos_downloaded ; killall aria2c ; exit' ERR EXIT
 
 #Main Window settings
 gui() {
@@ -89,39 +89,51 @@ get_iso() {
     iso_full_sig=$(grep "$DE" $iso_list | grep -v 'minimal').sig
     iso_minimal_sig=$(grep "$DE" $iso_list | grep 'minimal').sig
 
+    mkdir -p $iso_dir/.tmp
+
+    [[ $DE == 'sway' ]] && get_sway
+
     if [[ $TYPE == 'direct' ]] ; then
         [[ $VERSION == 'full' ]] && \
-        wget -nc -P "$iso_dir" "$iso_full_link" "$iso_full_sha1" "$iso_full_sig" 2>&1 | \
+        wget -nc -P "$iso_dir/.tmp" "$iso_full_link" "$iso_full_sha1" "$iso_full_sig" 2>&1 | \
         sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
         gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons --width=550 --height=150 || \
-        wget -nc -P "$iso_dir" "$iso_minimal_link" "$iso_minimal_sha1" "$iso_minimal_sig" 2>&1 | \
+        wget -nc -P "$iso_dir/.tmp" "$iso_minimal_link" "$iso_minimal_sha1" "$iso_minimal_sig" 2>&1 | \
         sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
         gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons --width=550 --height=150
      else
         [[ $VERSION == 'full' ]] && \
-        wget -nc -P "$iso_dir" "$iso_full_torrent" 2>&1 | \
+        wget -nc -P "$iso_dir/.tmp" "$iso_full_torrent" 2>&1 | \
         sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
         gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver torrent..." --auto-close --no-buttons --width=550 --height=150 || \
-        wget -nc -P "$iso_dir" "$iso_minimal_torrent" 2>&1 | \
+        wget -nc -P "$iso_dir/.tmp" "$iso_minimal_torrent" 2>&1 | \
         sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
         gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver torrent..." --auto-close --no-buttons --width=550 --height=150
     fi          
 
     if [[ $TYPE == 'torrent' ]] ; then
         [[ $VERSION == 'full' ]] && \
-        wget -nc -P "$iso_dir" "$iso_full_sha1" "$iso_full_sig" "$iso_full_torrent" 2>&1 | \
+        wget -nc -P "$iso_dir/.tmp" "$iso_full_sha1" "$iso_full_sig" "$iso_full_torrent" 2>&1 | \
         sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
         gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons --width=550 --height=150 || \
-        wget -nc -P "$iso_dir" "$iso_minimal_sha1" "$iso_minimal_sig" "$iso_minimal_torrent" 2>&1 | \
+        wget -nc -P "$iso_dir/.tmp" "$iso_minimal_sha1" "$iso_minimal_sig" "$iso_minimal_torrent" 2>&1 | \
         sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
         gui --image=download --progress --pulsate --title="Downloading $DE $iso_ver..." --auto-close --no-buttons --width=550 --height=150
 
-        cd $iso_dir
+        cd $iso_dir/.tmp
         (aria2c --continue=true --max-concurrent-downloads=5 --max-connection-per-server=4 --min-split-size=10M --split=5 --disable-ipv6=true \
-        --seed-time=0 --summary-interval=0 --console-log-level=warn --dir="$iso_dir" $iso_dir/*.torrent 2>&1) &
+        --seed-time=0 --summary-interval=0 --console-log-level=warn --dir="$iso_dir/.tmp" $iso_dir/.tmp/*.torrent 2>&1) &
         pid=$!; while kill -0 $pid 2>&1; do echo 'working'; done | zenity --progress --pulsate --text="Waiting for Torrent download..." \
         --title="Manjaro Isos $iso_ver Downloader and Checker" --auto-close --no-cancel
     fi
+        
+    cd $iso_dir/.tmp
+    iso_name=$(ls *.iso)
+    sha1_name=$(ls *.sha*)
+    sig_name=$(ls *.sig)
+    date +"$iso_name downloaded at %d/%m/%Y - %R" >> $iso_dir/history
+    mv *.iso *.sha* *.sig $iso_dir
+    rm -Rf $iso_dir/.tmp 
 }
 
 get_iso_dev() {
@@ -133,6 +145,8 @@ get_iso_dev() {
 
     mkdir -p $iso_dir/.tmp
 
+    [[ $DE -eq 'plasma-daily' ]] && VERSION=full
+
     [[ $VERSION == 'full' ]] && \
     wget -nc -P "$iso_dir/.tmp" $(cat $iso_full_link_dev) "$iso_full_sha256" 2>&1 | \
     sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
@@ -140,6 +154,15 @@ get_iso_dev() {
     wget -nc -P "$iso_dir/.tmp" $(cat $iso_minimal_link_dev) "$iso_minimal_sha256" 2>&1 | \
     sed -u 's/.* \([0-9]\+%\)\ \+\([0-9.]\+.\) \(.*\)/\1\n# Downloading at \2\/s, ETA \3/' | \
     gui --image=download --progress --pulsate --title="Downloading $DE development version..." --auto-close --no-buttons --width=550 --height=150
+}
+
+get_sway() {
+    gui --text="You have choice Sway edition; press the button for open the external link " --button="Exit":0 --button="Sway download":1 --button="New Iso":2
+        case $? in
+            0) exit 1 ;;
+            1) xdg-open 'https://manjaro-sway.download/' &  exec $main ;;
+            2) exec $main
+        esac
 }
 
 check_programs() {
@@ -166,14 +189,11 @@ check_manj_de() {
 check_integrity() {
     if [[ "$(ls -A $iso_dir)" ]]; then
         cd $iso_dir
-        last_iso=$(ls -At *.iso | head -n1)
-        last_sig=$(ls -At *.sig | head -n1)
-        last_chksum=$(ls -At *.sha* | head -n1)
 
         gui --timeout=5 --timeout-indicator=top --text='Next step: checksums integrity' --button=Skip:0 --width=550 --height=150
 
         if [[ $? != 0 ]]; then
-            (sha1sum -c $last_chksum > $check_sums_log) &
+            (sha1sum -c $sha1_name > $check_sums_log) &
             pid=$!
             
             while kill -0 $pid 2>&1; do echo 'working'; done | zenity --progress --pulsate --text="Waiting for SHA1SUM check..." \
@@ -185,7 +205,7 @@ check_integrity() {
         gui --timeout=5 --timeout-indicator=top --text='Next step: GPG integrity' --button=Skip:0 --width=550 --height=150
 
         if [[ $? != 0 ]]; then
-            (gpg --verify $last_sig $last_iso &> $gpg_log) &
+            (gpg --verify $sig_name $iso_name &> $gpg_log) &
             pid=$!
             
             while kill -0 $pid 2>&1; do echo 'working'; done | zenity --progress --pulsate --text="Waiting for GPG check..." \
@@ -226,13 +246,13 @@ check_connection() {
 }
 
 check_edition() {
-    gui --image="$window_icon" --text-align=center --text="Download Official, Community or Development ISOs:" --button='Official':0 \
+    gui --image="$window_icon" --text-align=center --text="Download <b>Official</b>, <b>Community</b> or <b>Development</b> ISOs:" --button='Official':0 \
     --button='Community':1 --button='Development':3 --button='Restart':2 --button='Exit':4
 
     sel_ed=$?
     case $sel_ed in
         0) edition='Xfce\!Plasma\!Gnome' ;;
-        1) edition='Budgie\!Cinnamon\!I3\!Mate' ;;
+        1) edition='Budgie\!Cinnamon\!I3\!Mate\!Sway' ;;
         2) exec $main ;;
         3) dev_iso_list && Welcome_dev ;;
         *) exit 1
@@ -265,12 +285,12 @@ build_iso() {
     7z t *.zip &> /dev/null &
     while pkill -0 7z; do
     	echo 'Checking'
-    done | zenity --progress --pulsate --text="Checkink..." --title="Manjaro Isos $iso_ver Downloader and Checker" --auto-close --no-cancel
+    done | zenity --progress --pulsate --text="Checking..." --title="Manjaro Isos $iso_ver Downloader and Checker" --auto-close --no-cancel
     if [[ $i -eq 0 ]]; then
         7z x -y *.zip &> /dev/null & 
         while pkill -0 7z; do
             echo 'Unzipping... '
-        done | zenity --progress --pulsate --text="Checkink..." --title="Manjaro Isos $iso_ver Downloader and Checker" --auto-close --no-cancel
+        done | zenity --progress --pulsate --text="Unzipping..." --title="Manjaro Isos $iso_ver Downloader and Checker" --auto-close --no-cancel
     else gui --text-aligned=center --text='Iso corrupted: choice again an Iso' --button='Change version':0 --button='Exit':1
         if [[ $? -eq 0 ]]; then
             exec $main
@@ -278,8 +298,15 @@ build_iso() {
         fi
     fi
     iso_name=$(ls *.iso)
+    date +"$iso_name downloaded at %d/%m/%Y - %R" >> $iso_dir/history
     mv *.iso *.sha* $iso_dir
     rm -Rf $iso_dir/.tmp
+}
+
+downloaded_iso() {
+    cd $iso_dir
+    ls *iso > $isos_downloaded
+    gui --width=850 --height=270 --button='Exit':1 --button='Next':0 --image=dialog-error --text-align=center --text="ISOs in the <b>$iso_dir</b> folder:" --text-info < $isos_downloaded
 }
 
 #Main program
@@ -287,6 +314,10 @@ build_iso() {
 check_programs
 check_connection
 check_manj_de
+if [[ ! -z "$(ls -A "$iso_dir")" ]]; then
+    downloaded_iso 
+    [[ $? -eq 1 ]] && exit 1
+fi
 check_edition
 
 [[ $is_dev = 'false' ]] && Welcome
@@ -307,7 +338,6 @@ fi
 [[ $is_dev == false ]] && get_iso
 [[ $is_dev == true ]] && get_iso_dev
 [[ $is_dev == true ]] && build_iso
-
 [[ $is_dev == false ]] && check_integrity || check_integrity_dev
 
 final_msg
