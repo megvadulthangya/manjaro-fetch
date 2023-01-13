@@ -314,7 +314,7 @@ downloaded_iso() {
 check_programs
 check_connection
 check_manj_de
-if [[ ! -z "$(ls -A "$iso_dir")" ]]; then
+if [[ $(find $iso_dir -name '*.iso') ]]; then
     downloaded_iso 
     [[ $? -eq 1 ]] && exit 1
 fi
