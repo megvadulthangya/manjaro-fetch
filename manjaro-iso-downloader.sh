@@ -22,7 +22,7 @@ iso_dev_list=$iso_dir/.iso-dev.list
 missing_prog=$(mktemp)
 missing_manj_de=$(mktemp)
 iso_ver_url='https://gitlab.manjaro.org/webpage/iso-info/-/raw/master/file-info.json' 
-iso_ver=$(curl -s $iso_ver_url | grep -m1 'image' | grep -oP '(?<=kde/).*(?=/manjaro)')
+iso_ver=$(curl -sJL $iso_ver_url | grep -m1 'image' | grep -oP '(?<=kde/).*(?=/manjaro)')
 version='full\!minimal'
 type='direct\!torrent'
 is_dev=false
@@ -43,7 +43,7 @@ manj_de=(xfce gnome kde i3 cinnamon budgie mate)
 manj_dev_de=(gnome plasma xfce)
 
 #grab iso link
-curl -s $iso_ver_url | grep 'image' | grep 'download.manjaro.org' | awk '{print $2}' | tr -d '",' > "$iso_list"
+curl -sJL $iso_ver_url | grep 'image' | grep 'download.manjaro.org' | awk '{print $2}' | tr -d '",' > "$iso_list"
 
 trap 'rm -Rf $iso_dir/.tmp $check_sums_log $gpg_log $missing_prog $missing_manj_de $isos_downloaded ; killall aria2c ; exit' ERR EXIT
 
