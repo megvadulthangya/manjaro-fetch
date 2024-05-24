@@ -37,7 +37,7 @@ isos_downloaded=$(mktemp)
 check_prog=(curl wget aria2c zenity yad awk sed)
 
 #Upated Manjaro flavour list
-manj_de=(xfce gnome kde i3 cinnamon budgie mate)
+manj_de=(xfce gnome kde i3 cinnamon)
 
 #Manjaro dev Iso list
 manj_dev_de=(gnome plasma xfce)
@@ -252,7 +252,7 @@ check_edition() {
     sel_ed=$?
     case $sel_ed in
         0) edition='Xfce\!Plasma\!Gnome' ;;
-        1) edition='Budgie\!Cinnamon\!I3\!Mate\!Sway' ;;
+        1) edition='Cinnamon\!I3\!Sway' ;;
         2) exec $main ;;
         3) dev_iso_list && Welcome_dev ;;
         *) exit 1
