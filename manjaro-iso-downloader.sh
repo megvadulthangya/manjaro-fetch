@@ -45,7 +45,7 @@ manj_dev_de=(gnome plasma xfce)
 #grab iso link
 curl -sJL $iso_ver_url | grep 'image' | grep 'download.manjaro.org' | awk '{print $2}' | tr -d '",' > "$iso_list"
 
-trap 'rm -Rf $iso_dir/.tmp $check_sums_log $gpg_log $missing_prog $missing_manj_de $isos_downloaded ; killall aria2c ; exit' ERR EXIT
+trap 'rm -Rf $iso_dir/.tmp $check_sums_log $gpg_log $missing_prog $missing_manj_de $isos_downloaded ; killall aria2c ; exit ; killall manjaro-iso-downloader' ERR EXIT
 
 #Main Window settings
 gui() {
