@@ -70,7 +70,7 @@ Welcome() {
 
 Welcome_dev() {
     is_dev=true
-    edition='Xfce\!Plasma\!Plasma-daily\!Gnome'
+    edition='Xfce\!Plasma\!Gnome'
     ISO=$(gui --image="$window_icon" --text-align=center --text="<b>Welcome to Manjaro Isos Downloader and Checker</b>\nA simple <b>GUI</b> for download lastes Isos and check the integrity" \
     --form --separator=" " \
     --field="Edition::CB" $edition \
@@ -145,7 +145,7 @@ get_iso_dev() {
 
     mkdir -p $iso_dir/.tmp
 
-    [[ $DE -eq 'plasma-daily' ]] && VERSION=full
+    #[[ $DE -eq 'plasma-daily' ]] && VERSION=full
 
     [[ $VERSION == 'full' ]] && \
     wget -nc -P "$iso_dir/.tmp" $(cat $iso_full_link_dev) "$iso_full_sha256" 2>&1 | \
@@ -276,7 +276,7 @@ dev_iso_list() {
         curl -s "$iso_ver_dev_url"/latest | jq -r ".assets[] | .browser_download_url " >> "$iso_dev_list"
     done
 
-    curl -s https://api.github.com/repos/manjaro/plasma-daily/releases/latest | jq -r ".assets[] | .browser_download_url" >> "$iso_dev_list"
+    #curl -s https://api.github.com/repos/manjaro/plasma-daily/releases/latest | jq -r ".assets[] | .browser_download_url" >> "$iso_dev_list"
 #################################################################################################
 }
 
