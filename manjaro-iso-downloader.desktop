@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Encoding=UTF-8
-Name=Manjaro ISO downloader
-Comment=Download official Manjaro Developer Isos
-Exec=/usr/bin/manjaro-iso-downloader
-Icon=dcmi
-Categories=Applications
-StartupNotify=false

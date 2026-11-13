@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Encoding=UTF-8
+Name=Manjaro Fetch
+Comment=Download Manjaro official, community and custom images
+Exec=manjaro-fetch
+Icon=manjaro-fetch
+Terminal=false
+Categories=Utility;System;
+StartupNotify=false

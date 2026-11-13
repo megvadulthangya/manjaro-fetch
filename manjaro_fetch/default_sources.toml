@@ -1,0 +1,95 @@
+# manjaro-fetch — default source configuration
+#
+# Users can override or extend this file by creating
+#   ~/.config/manjaro-fetch/sources.toml
+# with the same structure. Entries with the same `name` replace the bundled ones.
+#
+# Categories:
+#   official  — Manjaro team images (shown by default)
+#   community — Manjaro community images (shown by default)
+#   extras    — custom respins (hidden unless --extras / checkbox is used)
+#
+# Types:
+#   github        — GitHub Releases API. Options: repo (owner/name)
+#   sourceforge   — SourceForge project. Options: project
+#   archive_org   — Internet Archive item. Options: identifier
+#   sway_html     — Sway edition HTML index. Options: url (optional)
+#   gitlab        — Legacy file-info.json (deprecated, see NOTE below)
+
+[[source]]
+name = "release-review"
+type = "github"
+category = "official"
+repo = "manjaro/release-review"
+enabled = true
+
+[[source]]
+name = "community-editions"
+type = "github"
+category = "community"
+repo = "manjaro/community-editions"
+enabled = true
+
+[[source]]
+name = "sway"
+type = "sway_html"
+category = "community"
+url = "https://manjaro-sway.download/iso/"
+enabled = true
+
+[[source]]
+name = "gitlab-iso-info"
+type = "gitlab"
+category = "official"
+enabled = true
+url = "https://gitlab.manjaro.org/webpage/iso-info/-/raw/master/file-info.json"
+# NOTE: gitlab.manjaro.org currently returns HTTP 502 (server-side outage).
+# Manjaro is migrating to code.manjaro.org (Forgejo). Keep this source so
+# that behaviour is preserved if the endpoint comes back. Replace with a
+# Forgejo API (or a maintained manifest) once one is confirmed.
+
+# ---------------------------------------------------------------------------
+# Extras: custom respins. Hidden unless the user enables extras mode.
+# ---------------------------------------------------------------------------
+
+[[source]]
+name = "manjaro-awesome-respin"
+type = "sourceforge"
+category = "extras"
+project = "manjaro-awesome-iso"
+enabled = true
+
+[[source]]
+name = "manjaro-xfce-respin"
+type = "sourceforge"
+category = "extras"
+project = "manjaro-xfce-respin"
+enabled = true
+
+[[source]]
+name = "manjaro-gnome-respin"
+type = "sourceforge"
+category = "extras"
+project = "manjaro-gnome-respin"
+enabled = true
+
+[[source]]
+name = "manjaro-awesome-respin-ia"
+type = "archive_org"
+category = "extras"
+identifier = "manjaro-awesome-respin-testing-nvidia-stack"
+enabled = true
+
+[[source]]
+name = "manjaro-xfce-respin-ia"
+type = "archive_org"
+category = "extras"
+identifier = "manjaro-xfce-respin-testing-nvidia-stack"
+enabled = true
+
+[[source]]
+name = "manjaro-gnome-respin-ia"
+type = "archive_org"
+category = "extras"
+identifier = "manjaro-gnome-respin-testing-nvidia-stack"
+enabled = true

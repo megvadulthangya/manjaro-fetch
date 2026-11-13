@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "manjaro-fetch"
+version = "0.1.0"
+description = "Download manager for Manjaro official, community and custom images"
+readme = "README.md"
+license = { text = "GPL-2.0-only" }
+requires-python = ">=3.11"
+dependencies = ["PySide6>=6.5"]
+classifiers = [
+    "Environment :: X11 Applications :: Qt",
+    "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Software Distribution",
+]
+
+[project.scripts]
+manjaro-fetch = "manjaro_fetch.__main__:main"
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["manjaro_fetch*"]
+
+[tool.setuptools.package-data]
+manjaro_fetch = ["*.toml"]
