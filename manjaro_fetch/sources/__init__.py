@@ -28,10 +28,12 @@ def source_types() -> dict[str, type["Source"]]:
     }
 
 
-def load_releases(include_all: bool = False, include_extras: bool = False) -> list:
+def load_releases(include_extras: bool = False, force: bool = False) -> list:
     """Collect releases from all enabled sources.
 
-    Sources in category 'extras' are skipped unless include_extras is True.
+    By default the SQLite cache is used; network requests are only made
+    when ``force`` is True. Sources in category 'extras' are skipped
+    unless ``include_extras`` is True.
     """
     import sys
     from ..config import instantiate_sources
@@ -42,7 +44,7 @@ def load_releases(include_all: bool = False, include_extras: bool = False) -> li
         if src.category == "extras" and not include_extras:
             continue
         try:
-            results.extend(src.list_releases(include_all=include_all))
+            results.extend(src.list_releases(force=force))
         except Exception as exc:
             print(f"warning: source '{src.name}' failed: {exc}", file=sys.stderr)
         finally:

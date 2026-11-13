@@ -5,9 +5,3 @@
 # This file is part of manjaro-fetch, a download manager for Manjaro images.
 # Based on manjaro-iso-downloader by Stefano Capitani.
 # See the LICENSE file in the project root for full license text.
-from __future__ import annotations
-import sys
-from .ui.cli import main
-
-if __name__ == "__main__":
-    sys.exit(main())

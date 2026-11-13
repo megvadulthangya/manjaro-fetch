@@ -1,18 +1,18 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "manjaro-fetch"
-version = "0.1.0"
+version = "0.2.0"
 description = "Download manager for Manjaro official, community and custom images"
 readme = "README.md"
-license = { text = "GPL-2.0-only" }
+license = "GPL-2.0-only"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
-dependencies = ["PySide6>=6.5"]
+dependencies = []
 classifiers = [
-    "Environment :: X11 Applications :: Qt",
-    "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
+    "Environment :: X11 Applications :: GTK",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -21,13 +21,19 @@ classifiers = [
 ]
 
 [project.scripts]
-manjaro-fetch = "manjaro_fetch.__main__:main"
+manjaro-fetch = "manjaro_fetch.ui.cli:main"
 
 [project.optional-dependencies]
+# GTK3 GUI uses PyGObject, which must come from the system package
+# manager (python-gobject in the Manjaro extra repo). It cannot be
+# reliably pip-installed because it requires C compilation against
+# system libraries. The installer checks for it and prints a clear
+# message if missing.
+gui = []
 test = ["pytest>=8"]
 
 [tool.setuptools.packages.find]
 include = ["manjaro_fetch*"]
 
 [tool.setuptools.package-data]
-manjaro_fetch = ["*.toml"]
+manjaro_fetch = ["*.toml", "seed_cache.json"]

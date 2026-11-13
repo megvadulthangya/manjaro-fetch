@@ -32,24 +32,27 @@ class GitHubSource(Source):
         super().__init__(cfg)
         self.repo = self.options["repo"]
 
-    def list_releases(self, include_all: bool = False) -> list[Release]:
-        releases_raw = self._fetch_all() if include_all else self._fetch_latest()
+    def list_releases(self, force: bool = False) -> list[Release]:
+        cache_key = f"github:{self.repo}:latest"
+        raw = self.cached_json(cache_key, self._fetch_latest_raw, force)
+        releases_raw = raw if isinstance(raw, list) else [raw]
         out: list[Release] = []
-        latest_tag = releases_raw[0]["tag_name"] if releases_raw else None
-        for raw in releases_raw:
-            for asset in raw.get("assets", []):
+        for entry in releases_raw:
+            if not entry:
+                continue
+            tag = entry.get("tag_name", "")
+            for asset in entry.get("assets", []):
                 if not asset["name"].endswith((".iso", ".img")):
                     continue
-                edition = self._guess_edition(asset["name"])
                 out.append(Release(
                     source=self.name,
-                    release_id=f"{raw['tag_name']}/{asset['name']}",
-                    edition=edition,
+                    release_id=f"{tag}/{asset['name']}",
+                    edition=self._guess_edition(asset["name"]),
                     category=self.category,
-                    version=raw.get("name") or raw["tag_name"],
-                    date=raw.get("published_at", ""),
-                    is_latest=(raw["tag_name"] == latest_tag),
-                    notes=raw.get("body", "") or "",
+                    version=entry.get("name") or tag,
+                    date=entry.get("published_at", ""),
+                    is_latest=True,
+                    notes=entry.get("body", "") or "",
                     files=[ReleaseFile(
                         filename=asset["name"],
                         url=asset["browser_download_url"],
@@ -58,23 +61,37 @@ class GitHubSource(Source):
                 ))
         return out
 
-    def _fetch_latest(self) -> list[dict]:
-        return [_get_json(f"{API}/repos/{self.repo}/releases/latest")]
-
-    def _fetch_all(self) -> list[dict]:
-        results: list[dict] = []
+    def _fetch_latest_raw(self) -> list[dict]:
+        # /releases/latest may point to a tag without ISO assets (e.g. a
+        # release with only source tarballs). In that case walk the list
+        # and return the first release that actually contains an ISO.
+        try:
+            latest = _get_json(f"{API}/repos/{self.repo}/releases/latest")
+            if latest and self._has_iso(latest):
+                return [latest]
+        except Exception:
+            pass
         page = 1
-        while True:
+        while page <= 5:
             batch = _get_json(
-                f"{API}/repos/{self.repo}/releases?per_page=100&page={page}"
+                f"{API}/repos/{self.repo}/releases?per_page=30&page={page}"
             )
             if not batch:
                 break
-            results.extend(batch)
-            if len(batch) < 100:
+            for entry in batch:
+                if self._has_iso(entry):
+                    return [entry]
+            if len(batch) < 30:
                 break
             page += 1
-        return results
+        return []
+
+    @staticmethod
+    def _has_iso(release: dict) -> bool:
+        return any(
+            a.get("name", "").endswith((".iso", ".img"))
+            for a in release.get("assets", [])
+        )
 
     @staticmethod
     def _guess_edition(filename: str) -> str:

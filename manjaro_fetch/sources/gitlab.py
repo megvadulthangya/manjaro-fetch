@@ -26,17 +26,11 @@ class GitLabSource(Source):
         super().__init__(cfg)
         self.url = self.options["url"]
 
-    def list_releases(self, include_all: bool = False) -> list[Release]:
-        req = urllib.request.Request(
-            self.url, headers={"User-Agent": "manjaro-fetch/0.1"}
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.load(resp)
-        except Exception:
-            return []
+    def list_releases(self, force: bool = False) -> list[Release]:
+        cache_key = f"gitlab:{self.url}:latest"
+        raw = self.cached_json(cache_key, self._fetch_latest_raw, force)
         releases: list[Release] = []
-        for entry in data.get("image", []):
+        for entry in raw if isinstance(raw, list) else []:
             url = entry.get("download", "")
             if not url.startswith("https://download.manjaro.org/"):
                 continue
@@ -62,6 +56,17 @@ class GitLabSource(Source):
                 )],
             ))
         return releases
+
+    def _fetch_latest_raw(self) -> list[dict]:
+        req = urllib.request.Request(
+            self.url, headers={"User-Agent": "manjaro-fetch/0.1"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.load(resp)
+        except Exception:
+            return []
+        return data.get("image", []) or []
 
     @staticmethod
     def _edition_from_path(url: str) -> str:

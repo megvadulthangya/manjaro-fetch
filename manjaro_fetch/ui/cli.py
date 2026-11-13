@@ -16,7 +16,7 @@ from ..config import default_download_dir
 from ..downloader import download_release
 from ..models import release_key
 from ..sources import load_releases
-from ..state import list_downloaded, refresh_presence
+from ..state import cache_metadata, list_downloaded, refresh_presence
 
 
 def _format_size(size: int | None) -> str:
@@ -35,26 +35,34 @@ def _print_table(releases: list) -> None:
     if not releases:
         print("No releases found.")
         return
-    print(f"{'KEY':<70} {'EDITION':<12} {'CATEGORY':<10} {'LATEST':<7} SIZE")
-    print("-" * 115)
+    print(f"{'KEY':<70} {'EDITION':<12} {'CATEGORY':<10} SIZE")
+    print("-" * 108)
     for rel in releases:
         pf = rel.primary_file
         size = _format_size(pf.size) if pf else "?"
-        latest = "yes" if rel.is_latest else ""
         print(
             f"{release_key(rel):<70} {rel.edition:<12} "
-            f"{rel.category:<10} {latest:<7} {size}"
+            f"{rel.category:<10} {size}"
         )
 
 
 def cmd_list(args: argparse.Namespace) -> int:
     releases = load_releases(
-        include_all=args.all, include_extras=args.extras
+        include_extras=args.extras, force=args.refresh
     )
     if args.source:
         releases = [r for r in releases if r.source == args.source]
     if args.category:
         releases = [r for r in releases if r.category == args.category]
+    if not args.refresh:
+        meta = cache_metadata()
+        if meta["count"] == 0:
+            print(
+                "No releases cached. Run 'manjaro-fetch list --refresh' "
+                "to fetch from network.",
+                file=sys.stderr,
+            )
+            return 1
     if args.json:
         print(json.dumps([
             {
@@ -83,14 +91,18 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_download(args: argparse.Namespace) -> int:
-    releases = load_releases(include_all=True, include_extras=True)
+    releases = load_releases(include_extras=True, force=False)
     target = None
     for rel in releases:
         if release_key(rel) == args.release_id or rel.release_id == args.release_id:
             target = rel
             break
     if target is None:
-        print(f"error: release not found: {args.release_id}", file=sys.stderr)
+        print(
+            f"error: release not found in cache: {args.release_id}\n"
+            f"hint: run 'manjaro-fetch list --refresh' first",
+            file=sys.stderr,
+        )
         return 1
     dest = Path(args.dir).expanduser() if args.dir else default_download_dir()
 
@@ -140,13 +152,22 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 def cmd_config(args: argparse.Namespace) -> int:
-    from ..config import user_config_dir
+    from ..config import user_config_dir, data_dir
+    meta = cache_metadata()
     print(f"user config dir : {user_config_dir()}")
-    print(f"data dir        : {__import__('manjaro_fetch.config', fromlist=['data_dir']).data_dir()}")
+    print(f"data dir        : {data_dir()}")
     print(f"default download: {default_download_dir()}")
     user_cfg = user_config_dir() / "sources.toml"
     state = "present" if user_cfg.is_file() else "missing"
     print(f"user sources    : {user_cfg} ({state})")
+    print(f"cached entries  : {meta['count']}")
+    print(f"last refreshed  : {meta['last_refreshed'] or 'never'}")
+    return 0
+
+
+def cmd_refresh(args: argparse.Namespace) -> int:
+    releases = load_releases(include_extras=True, force=True)
+    print(f"Refreshed {len(releases)} release(s) into cache.")
     return 0
 
 
@@ -162,9 +183,13 @@ def cmd_sources(args: argparse.Namespace) -> int:
 
 def cmd_gui(args: argparse.Namespace) -> int:
     try:
-        from .qt_app import run_gui
+        from .gtk_app import run_gui
     except ImportError as exc:
-        print(f"error: PySide6 not available: {exc}", file=sys.stderr)
+        print(f"error: GTK3/PyGObject not available: {exc}", file=sys.stderr)
+        print(
+            "Install it with: sudo pacman -S python-gobject",
+            file=sys.stderr,
+        )
         return 1
     return run_gui()
 
@@ -172,17 +197,21 @@ def cmd_gui(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="manjaro-fetch",
-        description="Download manager for Manjaro images.",
+        description=(
+            "Download manager for Manjaro images. "
+            "Cached data is served by default; use --refresh to fetch "
+            "the latest releases from the network."
+        ),
     )
     parser.add_argument(
         "--version", action="version", version="manjaro-fetch 0.1.0"
     )
     sub = parser.add_subparsers(dest="command")
 
-    p_list = sub.add_parser("list", help="List available releases")
+    p_list = sub.add_parser("list", help="List cached releases (latest only)")
     p_list.add_argument(
-        "-a", "--all", action="store_true",
-        help="Include all versions, not just the latest",
+        "-r", "--refresh", action="store_true",
+        help="Fetch the latest releases from the network before listing",
     )
     p_list.add_argument(
         "-e", "--extras", action="store_true",
@@ -193,7 +222,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_list.add_argument("--json", action="store_true", help="JSON output")
     p_list.set_defaults(func=cmd_list)
 
-    p_dl = sub.add_parser("download", help="Download a release by key")
+    p_refresh = sub.add_parser(
+        "refresh", help="Fetch the latest releases from the network into the cache"
+    )
+    p_refresh.set_defaults(func=cmd_refresh)
+
+    p_dl = sub.add_parser("download", help="Download a cached release by key")
     p_dl.add_argument("release_id", help="Release key from 'list' output")
     p_dl.add_argument("-d", "--dir", help="Destination directory")
     p_dl.add_argument(
@@ -209,7 +243,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_status.set_defaults(func=cmd_status)
 
-    p_config = sub.add_parser("config", help="Show paths and config")
+    p_config = sub.add_parser("config", help="Show paths, cache state and config")
     p_config.set_defaults(func=cmd_config)
 
     p_sources = sub.add_parser("sources", help="List configured sources")

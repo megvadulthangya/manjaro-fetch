@@ -25,45 +25,54 @@ class SwaySource(Source):
         super().__init__(cfg)
         self.url = self.options.get("url", "https://manjaro-sway.download/iso/")
 
-    def list_releases(self, include_all: bool = False) -> list[Release]:
+    def list_releases(self, force: bool = False) -> list[Release]:
+        cache_key = f"sway:{self.url}:latest"
+        raw = self.cached_json(cache_key, self._fetch_latest_raw, force)
+        if not raw or not raw.get("iso_name"):
+            return []
+        return [Release(
+            source=self.name,
+            release_id=f"{raw['folder']}/{raw['iso_name']}",
+            edition="sway",
+            category=self.category,
+            version=raw.get("version", ""),
+            date=raw.get("date", ""),
+            is_latest=True,
+            files=[ReleaseFile(
+                filename=raw["iso_name"],
+                url=raw["iso_url"],
+                checksum_urls={"sha256": raw.get("checksum_url", "")},
+            )],
+        )]
+
+    def _fetch_latest_raw(self) -> dict:
         try:
             html = _get(self.url)
         except Exception:
-            return []
-        folders = re.findall(r'href="(?:\./)?(\d{12})/"', html)
+            return {}
+        folders = re.findall(r'href="[^"]*?(\d{12})/"', html)
         if not folders:
-            return []
-        folders = sorted(set(folders), reverse=True)
-        latest = folders[0]
-        results: list[Release] = []
-        for folder in folders:
-            if not include_all and folder != latest:
-                continue
-            folder_url = urljoin(self.url, folder + "/")
-            try:
-                folder_html = _get(folder_url)
-            except Exception:
-                continue
-            iso_match = re.search(r'href="([^"]+\.iso)"', folder_html)
-            if not iso_match:
-                continue
-            iso_url = urljoin(folder_url, iso_match.group(1))
-            iso_name = iso_url.rsplit("/", 1)[-1]
-            results.append(Release(
-                source=self.name,
-                release_id=f"{folder}/{iso_name}",
-                edition="sway",
-                category=self.category,
-                version=self._parse_version(iso_name),
-                date=self._parse_date(folder),
-                is_latest=(folder == latest),
-                files=[ReleaseFile(
-                    filename=iso_name,
-                    url=iso_url,
-                    checksum_urls={"sha256": urljoin(folder_url, "SHA256SUMS")},
-                )],
-            ))
-        return results
+            return {}
+        latest = sorted(set(folders), reverse=True)[0]
+        folder_url = urljoin(self.url, latest + "/")
+        try:
+            folder_html = _get(folder_url)
+        except Exception:
+            return {}
+        iso_match = re.search(r'href="([^"]+\.iso)"', folder_html)
+        if not iso_match:
+            return {}
+        iso_url = urljoin(folder_url, iso_match.group(1))
+        iso_name = iso_url.rsplit("/", 1)[-1]
+        return {
+            "folder": latest,
+            "folder_url": folder_url,
+            "iso_name": iso_name,
+            "iso_url": iso_url,
+            "checksum_url": urljoin(folder_url, "SHA256SUMS"),
+            "version": self._parse_version(iso_name),
+            "date": self._parse_date(latest),
+        }
 
     @staticmethod
     def _parse_version(filename: str) -> str:
