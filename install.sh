@@ -6,37 +6,70 @@
 # This file is part of manjaro-fetch, a download manager for Manjaro images.
 # Based on manjaro-iso-downloader by Stefano Capitani.
 # See the LICENSE file in the project root for full license text.
-INSTALL() {
-	cp -f manjaro-iso-downloader.sh /usr/share/bin/manjaro-iso-downloader
-	chmod 755 /usr/share/bin/manjaro-iso-downloader
-	cp -f manjaro-iso-downloader.desktop /usr/share/applications/manjaro-iso-downloader.desktop
-	chmod 644 /usr/share/applications/manjaro-iso-downloader.desktop
+# Portable user-level installer for manjaro-fetch.
+# Usage: ./install.sh -i   (or: ./install.sh i)
+#        ./install.sh -r   (or: ./install.sh r)
+# Silent on success; no output for missing arguments.
+set -euo pipefail
+
+BIN_DIR="${HOME}/.local/bin"
+APPS_DIR="${HOME}/.local/share/applications"
+ICONS_ROOT="${HOME}/.local/share/icons/hicolor"
+
+install_app() {
+    mkdir -p "${BIN_DIR}" "${APPS_DIR}"
+
+    python3 -m pip install --user --upgrade --quiet --no-warn-script-location .
+
+    python3 - "${APPS_DIR}/manjaro-fetch.desktop" <<'PY'
+import os
+import sys
+src = "manjaro-fetch.desktop"
+dst = sys.argv[1]
+with open(src, "r", encoding="utf-8") as fh:
+    content = fh.read()
+content = content.replace("Exec=manjaro-fetch", f"Exec={os.path.expanduser('~')}/.local/bin/manjaro-fetch")
+with open(dst, "w", encoding="utf-8") as fh:
+    fh.write(content)
+PY
+    chmod 644 "${APPS_DIR}/manjaro-fetch.desktop"
+
+    for size in 16x16 22x22 24x24 32x32 48x48 64x64; do
+        src="icons/hicolor/${size}/apps/dcmi.svg"
+        if [ -f "${src}" ]; then
+            mkdir -p "${ICONS_ROOT}/${size}/apps"
+            cp -f "${src}" "${ICONS_ROOT}/${size}/apps/manjaro-fetch.svg"
+        fi
+    done
+    if [ -f "icons/hicolor/scalable/apps/dcmi.svg" ]; then
+        mkdir -p "${ICONS_ROOT}/scalable/apps"
+        cp -f "icons/hicolor/scalable/apps/dcmi.svg" "${ICONS_ROOT}/scalable/apps/manjaro-fetch.svg"
+    fi
+
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database "${APPS_DIR}" >/dev/null 2>&1 || true
+    fi
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+        gtk-update-icon-cache -q -t -f "${ICONS_ROOT}" >/dev/null 2>&1 || true
+    fi
 }
 
-REMOVE () {
-	rm -f /usr/share/applications/manjaro-iso-downloader.desktop
-	rm -f /usr/share/bin/manjaro-iso-downloader
+remove_app() {
+    rm -f "${APPS_DIR}/manjaro-fetch.desktop"
+    for size in 16x16 22x22 24x24 32x32 48x48 64x64 scalable; do
+        rm -f "${ICONS_ROOT}/${size}/apps/manjaro-fetch.svg"
+    done
+    python3 -m pip uninstall -y --quiet manjaro-fetch >/dev/null 2>&1 || true
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database "${APPS_DIR}" >/dev/null 2>&1 || true
+    fi
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+        gtk-update-icon-cache -q -t -f "${ICONS_ROOT}" >/dev/null 2>&1 || true
+    fi
 }
 
-USAGE() {
-	echo
-    echo "Usage: you need to specific an argument:"
-	echo "(i)pply or (r)emove"
-	echo
-}
-
-# Make sure only root can run our script
-if [ "$(id -u)" != "0" ]; then
-echo "This script must be run as root" 1>&2
-exit 1
-fi
-
-if [[ ${@} == 0 ]]; then
-	USAGE
-	exit 1
-else case ${@} in
-	i|I) INSTALL ;;
-	r|R) REMOVE ;;
-	*) USAGE ;;
-	esac
-fi
+case "${1:-}" in
+    -i|i|--install) install_app ;;
+    -r|r|--remove)  remove_app ;;
+    *)              exit 1 ;;
+esac
