@@ -6,10 +6,12 @@
 # Based on manjaro-iso-downloader by Stefano Capitani.
 # See the LICENSE file in the project root for full license text.
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:
     from .base import Source
+
+CancelFn = Optional[Callable[[], bool]]
 
 
 def source_types() -> dict[str, type["Source"]]:
@@ -28,12 +30,18 @@ def source_types() -> dict[str, type["Source"]]:
     }
 
 
-def load_releases(include_extras: bool = False, force: bool = False) -> list:
+def load_releases(
+    include_extras: bool = False,
+    force: bool = False,
+    include_all: bool = False,
+    cancel: CancelFn = None,
+) -> list:
     """Collect releases from all enabled sources.
 
     By default the SQLite cache is used; network requests are only made
-    when ``force`` is True. Sources in category 'extras' are skipped
-    unless ``include_extras`` is True.
+    when ``force`` is True. When ``include_all`` is True, sources that
+    support pagination will return every release they can find, and
+    ``cancel`` is polled between pages so the caller can abort.
     """
     import sys
     from ..config import instantiate_sources
@@ -41,10 +49,18 @@ def load_releases(include_extras: bool = False, force: bool = False) -> list:
     sources = instantiate_sources(only_enabled=True)
     results: list = []
     for src in sources:
+        if cancel and cancel():
+            break
         if src.category == "extras" and not include_extras:
             continue
         try:
-            results.extend(src.list_releases(force=force))
+            results.extend(
+                src.list_releases(
+                    force=force,
+                    include_all=include_all,
+                    cancel=cancel,
+                )
+            )
         except Exception as exc:
             print(f"warning: source '{src.name}' failed: {exc}", file=sys.stderr)
         finally:

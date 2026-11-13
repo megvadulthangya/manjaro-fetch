@@ -8,6 +8,7 @@
 from __future__ import annotations
 import json
 import urllib.request
+from typing import Callable, Optional
 
 from ..models import Release, ReleaseFile
 from .base import Source
@@ -32,59 +33,99 @@ class GitHubSource(Source):
         super().__init__(cfg)
         self.repo = self.options["repo"]
 
-    def list_releases(self, force: bool = False) -> list[Release]:
+    def list_releases(
+        self,
+        force: bool = False,
+        include_all: bool = False,
+        cancel: Optional[Callable[[], bool]] = None,
+    ) -> list[Release]:
+        if include_all:
+            return self._list_all(force=force, cancel=cancel)
+        return self._list_latest(force=force)
+
+    # -- latest only --------------------------------------------------------
+
+    def _list_latest(self, force: bool = False) -> list[Release]:
         cache_key = f"github:{self.repo}:latest"
         raw = self.cached_json(cache_key, self._fetch_latest_raw, force)
-        releases_raw = raw if isinstance(raw, list) else [raw]
-        out: list[Release] = []
-        for entry in releases_raw:
-            if not entry:
-                continue
-            tag = entry.get("tag_name", "")
-            for asset in entry.get("assets", []):
-                if not asset["name"].endswith((".iso", ".img")):
-                    continue
-                out.append(Release(
-                    source=self.name,
-                    release_id=f"{tag}/{asset['name']}",
-                    edition=self._guess_edition(asset["name"]),
-                    category=self.category,
-                    version=entry.get("name") or tag,
-                    date=entry.get("published_at", ""),
-                    is_latest=True,
-                    notes=entry.get("body", "") or "",
-                    files=[ReleaseFile(
-                        filename=asset["name"],
-                        url=asset["browser_download_url"],
-                        size=asset.get("size"),
-                    )],
-                ))
-        return out
+        if not raw:
+            return []
+        return self._release_from_entry(raw[0] if isinstance(raw, list) else raw)
 
     def _fetch_latest_raw(self) -> list[dict]:
-        # /releases/latest may point to a tag without ISO assets (e.g. a
-        # release with only source tarballs). In that case walk the list
-        # and return the first release that actually contains an ISO.
-        try:
-            latest = _get_json(f"{API}/repos/{self.repo}/releases/latest")
-            if latest and self._has_iso(latest):
-                return [latest]
-        except Exception:
-            pass
+        # Walk releases newest-first and return the first one that
+        # actually contains an ISO asset. GitHub returns releases in
+        # reverse chronological order, so the first match is the newest.
         page = 1
-        while page <= 5:
+        while page <= 10:
             batch = _get_json(
-                f"{API}/repos/{self.repo}/releases?per_page=30&page={page}"
+                f"{API}/repos/{self.repo}/releases?per_page=100&page={page}"
             )
             if not batch:
                 break
             for entry in batch:
                 if self._has_iso(entry):
                     return [entry]
-            if len(batch) < 30:
+            if len(batch) < 100:
                 break
             page += 1
         return []
+
+    # -- all releases (paged, cancellable) ---------------------------------
+
+    def _list_all(
+        self, force: bool = False, cancel: Optional[Callable[[], bool]] = None
+    ) -> list[Release]:
+        cache_key = f"github:{self.repo}:all"
+        raw = self.cached_json(cache_key, self._fetch_all_raw, force)
+        if not isinstance(raw, list):
+            return []
+        out: list[Release] = []
+        for entry in raw:
+            if cancel and cancel():
+                break
+            out.extend(self._release_from_entry(entry))
+        return out
+
+    def _fetch_all_raw(self) -> list[dict]:
+        results: list[dict] = []
+        page = 1
+        while page <= 20:  # hard cap: 2000 releases
+            batch = _get_json(
+                f"{API}/repos/{self.repo}/releases?per_page=100&page={page}"
+            )
+            if not batch:
+                break
+            results.extend(batch)
+            if len(batch) < 100:
+                break
+            page += 1
+        return results
+
+    # -- helpers ------------------------------------------------------------
+
+    def _release_from_entry(self, entry: dict) -> list[Release]:
+        tag = entry.get("tag_name", "")
+        out: list[Release] = []
+        for asset in entry.get("assets", []):
+            if not asset["name"].endswith((".iso", ".img")):
+                continue
+            out.append(Release(
+                source=self.name,
+                release_id=f"{tag}/{asset['name']}",
+                edition=self._guess_edition(asset["name"]),
+                category=self.category,
+                version=entry.get("name") or tag,
+                date=entry.get("published_at", ""),
+                is_latest=False,
+                notes=entry.get("body", "") or "",
+                files=[ReleaseFile(
+                    filename=asset["name"],
+                    url=asset["browser_download_url"],
+                    size=asset.get("size"),
+                )],
+            ))
+        return out
 
     @staticmethod
     def _has_iso(release: dict) -> bool:

@@ -8,13 +8,15 @@
 from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Optional
 
 from ..state import get_cached, set_cached
 
 if TYPE_CHECKING:
     from ..config import SourceConfig
     from ..models import Release
+
+CancelFn = Optional[Callable[[], bool]]
 
 
 class Source(ABC):
@@ -28,7 +30,12 @@ class Source(ABC):
         self.options = dict(cfg.options)
 
     @abstractmethod
-    def list_releases(self, force: bool = False) -> list["Release"]:
+    def list_releases(
+        self,
+        force: bool = False,
+        include_all: bool = False,
+        cancel: CancelFn = None,
+    ) -> list["Release"]:
         ...
 
     def close(self) -> None:
@@ -42,7 +49,8 @@ class Source(ABC):
             if cached is not None:
                 return json.loads(cached)
         data = fetch_fn()
-        set_cached(key, json.dumps(data))
+        if data:
+            set_cached(key, json.dumps(data))
         return data
 
     def cached_text(self, key: str, fetch_fn: Callable[[], str], force: bool) -> str:
@@ -51,5 +59,6 @@ class Source(ABC):
             if cached is not None:
                 return cached
         data = fetch_fn()
-        set_cached(key, data)
+        if data:
+            set_cached(key, data)
         return data

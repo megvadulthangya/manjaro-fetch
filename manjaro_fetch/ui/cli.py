@@ -9,7 +9,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
+import threading
 from pathlib import Path
 
 from ..config import default_download_dir
@@ -17,6 +19,13 @@ from ..downloader import download_release
 from ..models import release_key
 from ..sources import load_releases
 from ..state import cache_metadata, list_downloaded, refresh_presence
+
+_stop = threading.Event()
+
+
+def _handle_sigint(signum, frame):
+    _stop.set()
+    print("\nInterrupted. Partial results follow.", file=sys.stderr)
 
 
 def _format_size(size: int | None) -> str:
@@ -47,14 +56,26 @@ def _print_table(releases: list) -> None:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    releases = load_releases(
-        include_extras=args.extras, force=args.refresh
-    )
+    if args.all:
+        signal.signal(signal.SIGINT, _handle_sigint)
+        _stop.clear()
+        releases = load_releases(
+            include_extras=args.extras,
+            force=args.refresh,
+            include_all=True,
+            cancel=lambda: _stop.is_set(),
+        )
+    else:
+        releases = load_releases(
+            include_extras=args.extras,
+            force=args.refresh,
+            include_all=False,
+        )
     if args.source:
         releases = [r for r in releases if r.source == args.source]
     if args.category:
         releases = [r for r in releases if r.category == args.category]
-    if not args.refresh:
+    if not args.refresh and not args.all:
         meta = cache_metadata()
         if meta["count"] == 0:
             print(
@@ -166,7 +187,7 @@ def cmd_config(args: argparse.Namespace) -> int:
 
 
 def cmd_refresh(args: argparse.Namespace) -> int:
-    releases = load_releases(include_extras=True, force=True)
+    releases = load_releases(include_extras=True, force=True, include_all=False)
     print(f"Refreshed {len(releases)} release(s) into cache.")
     return 0
 
@@ -204,14 +225,21 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--version", action="version", version="manjaro-fetch 0.1.0"
+        "--version", action="version", version="manjaro-fetch 0.3.0"
     )
     sub = parser.add_subparsers(dest="command")
 
-    p_list = sub.add_parser("list", help="List cached releases (latest only)")
+    p_list = sub.add_parser(
+        "list",
+        help="List cached releases (latest only, or all with --all)",
+    )
     p_list.add_argument(
         "-r", "--refresh", action="store_true",
         help="Fetch the latest releases from the network before listing",
+    )
+    p_list.add_argument(
+        "-a", "--all", action="store_true",
+        help="Page through every release (can be slow, Ctrl+C to stop)",
     )
     p_list.add_argument(
         "-e", "--extras", action="store_true",

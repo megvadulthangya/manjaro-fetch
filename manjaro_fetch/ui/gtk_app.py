@@ -21,10 +21,12 @@ from ..state import is_downloaded
 
 
 class _LoaderThread(threading.Thread):
-    def __init__(self, include_extras, force, on_done, on_error):
+    def __init__(self, include_extras, force, include_all, cancel, on_done, on_error):
         super().__init__(daemon=True)
         self._include_extras = include_extras
         self._force = force
+        self._include_all = include_all
+        self._cancel = cancel
         self._on_done = on_done
         self._on_error = on_error
 
@@ -33,6 +35,8 @@ class _LoaderThread(threading.Thread):
             releases = load_releases(
                 include_extras=self._include_extras,
                 force=self._force,
+                include_all=self._include_all,
+                cancel=self._cancel,
             )
             GLib.idle_add(self._on_done, releases)
         except Exception as exc:
@@ -68,6 +72,7 @@ class MainWindow(Gtk.Window):
         self._releases = []
         self._by_key = {}
         self._generation = 0
+        self._cancel_event = threading.Event()
 
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         vbox.set_margin_top(6)
@@ -80,16 +85,24 @@ class MainWindow(Gtk.Window):
         self.show_extras_check = Gtk.CheckButton(
             label="Show extras (custom respins)"
         )
-        self.reload_btn = Gtk.Button(label="Refresh from network")
-        self.reload_btn.set_tooltip_text(
-            "Fetch the latest releases from GitHub, Sway, SourceForge "
-            "and Internet Archive. This uses network quota."
+        self.refresh_btn = Gtk.Button(label="Refresh latest")
+        self.refresh_btn.set_tooltip_text(
+            "Fetch the newest release per source from the network."
         )
+        self.load_all_btn = Gtk.Button(label="Load all releases")
+        self.load_all_btn.set_tooltip_text(
+            "Page through every release. Can take a while; use Stop to abort."
+        )
+        self.stop_btn = Gtk.Button(label="Stop")
+        self.stop_btn.set_sensitive(False)
+        self.stop_btn.set_tooltip_text("Abort the current network load.")
         self.search_entry = Gtk.SearchEntry()
         self.search_entry.set_placeholder_text("Filter…")
         self.search_entry.set_hexpand(True)
         filters.pack_start(self.show_extras_check, False, False, 0)
-        filters.pack_start(self.reload_btn, False, False, 0)
+        filters.pack_start(self.refresh_btn, False, False, 0)
+        filters.pack_start(self.load_all_btn, False, False, 0)
+        filters.pack_start(self.stop_btn, False, False, 0)
         filters.pack_start(self.search_entry, True, True, 0)
         vbox.pack_start(filters, False, False, 0)
 
@@ -129,36 +142,52 @@ class MainWindow(Gtk.Window):
         bottom.pack_start(self.download_btn, False, False, 0)
         vbox.pack_start(bottom, False, False, 0)
 
-        self.show_extras_check.connect("toggled", lambda *_: self._load(force=False))
-        self.reload_btn.connect("clicked", lambda *_: self._load(force=True))
+        self.show_extras_check.connect(
+            "toggled", lambda *_: self._load(force=False, include_all=False)
+        )
+        self.refresh_btn.connect(
+            "clicked", lambda *_: self._load(force=True, include_all=False)
+        )
+        self.load_all_btn.connect(
+            "clicked", lambda *_: self._load(force=False, include_all=True)
+        )
+        self.stop_btn.connect("clicked", lambda *_: self._cancel_event.set())
         self.search_entry.connect("search-changed", lambda *_: self._populate_tree())
         self.tree.get_selection().connect("changed", self._on_select)
         self.download_btn.connect("clicked", lambda *_: self._on_download())
         self.open_btn.connect("clicked", lambda *_: self._on_open_folder())
 
-        self._load(force=False)
+        self._load(force=False, include_all=False)
 
-    def _load(self, force: bool):
+    def _load(self, force: bool, include_all: bool):
+        self._cancel_event.clear()
         self._generation += 1
         gen = self._generation
-        self.reload_btn.set_sensitive(False)
-        self.status_label.set_text(
-            "Refreshing from network…" if force else "Loading from cache…"
-        )
+        self.refresh_btn.set_sensitive(False)
+        self.load_all_btn.set_sensitive(False)
+        self.stop_btn.set_sensitive(include_all)
+        if include_all:
+            self.status_label.set_text("Loading all releases… (Stop to abort)")
+        elif force:
+            self.status_label.set_text("Refreshing latest from network…")
+        else:
+            self.status_label.set_text("Loading from cache…")
 
         def on_done(releases):
             if gen != self._generation:
                 return False
             self._releases = releases
             self._by_key = {release_key(r): r for r in releases}
-            if not releases and not force:
+            if not releases and not force and not include_all:
                 self.status_label.set_text(
-                    "Cache is empty. Click 'Refresh from network' to populate it."
+                    "Cache is empty. Click 'Refresh latest' to populate it."
                 )
             else:
                 self.status_label.set_text(f"{len(releases)} release(s)")
             self._populate_tree()
-            self.reload_btn.set_sensitive(True)
+            self.refresh_btn.set_sensitive(True)
+            self.load_all_btn.set_sensitive(True)
+            self.stop_btn.set_sensitive(False)
             return False
 
         def on_error(msg):
@@ -174,12 +203,16 @@ class MainWindow(Gtk.Window):
             dlg.format_secondary_text(msg)
             dlg.run()
             dlg.destroy()
-            self.reload_btn.set_sensitive(True)
+            self.refresh_btn.set_sensitive(True)
+            self.load_all_btn.set_sensitive(True)
+            self.stop_btn.set_sensitive(False)
             return False
 
         _LoaderThread(
             self.show_extras_check.get_active(),
             force,
+            include_all,
+            self._cancel_event.is_set,
             on_done, on_error,
         ).start()
 
@@ -211,6 +244,7 @@ class MainWindow(Gtk.Window):
             f"Category: {rel.category}",
             f"Version:  {rel.version or '—'}",
             f"Date:     {rel.date or '—'}",
+            f"Latest:   {'yes' if rel.is_latest else 'no'}",
             "",
             "Files:",
         ]
